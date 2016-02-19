@@ -60,6 +60,7 @@ public:
 
     void initialize();
     void uninitialize();
+	void logMe(const char*str);
 
 private:
     static UnpackingEngine* instance;
@@ -72,7 +73,9 @@ private:
 	bool isNestedHook() {return nestedHook;}
     
 	std::string retProtectionString(ULONG protectionbits);
+	void dumpMeminfoInfo();
 	void DumpModuleInfo();
+	
 
     /* NtProtectVirtualMemory hook */
     HOOK_DEFINE_5(NTSTATUS, NTAPI, NtProtectVirtualMemory, HANDLE, PVOID*, PULONG, ULONG, PULONG);
@@ -101,5 +104,6 @@ private:
 	/* NtFreeVirtualMemory hook */
     HOOK_DEFINE_4(NTSTATUS, NTAPI, NtFreeVirtualMemory, HANDLE, PVOID*, PULONG, ULONG);
 
+	HOOK_DEFINE_2(NTSTATUS, NTAPI, ZwTerminateThread, HANDLE, NTSTATUS);
 };
 

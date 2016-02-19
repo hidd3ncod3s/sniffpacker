@@ -23,6 +23,27 @@ void loopme()
 	}
 }
 
+void UnpackingEngine::dumpMeminfoInfo()
+{
+	MEMORY_BASIC_INFORMATION mbi;
+
+	memset(&mbi, 0, sizeof(MEMORY_BASIC_INFORMATION));
+	auto val= VirtualQuery((LPCVOID)0x00401000, &mbi, sizeof(MEMORY_BASIC_INFORMATION));
+	if (val != 0){
+		Logger::getInstance()->write(LOG_INFO, "mbi.BaseAddress= 0x%08x\n", mbi.BaseAddress);
+		Logger::getInstance()->write(LOG_INFO, "mbi.AllocationBase= 0x%08x\n", mbi.AllocationBase);
+		Logger::getInstance()->write(LOG_INFO, "mbi.AllocationProtect= 0x%08x(%s)\n", mbi.AllocationProtect, UnpackingEngine::retProtectionString(mbi.AllocationProtect).c_str());
+		Logger::getInstance()->write(LOG_INFO, "mbi.RegionSize= 0x%08x\n", mbi.RegionSize);
+		Logger::getInstance()->write(LOG_INFO, "mbi.State= 0x%08x\n", mbi.State);
+		Logger::getInstance()->write(LOG_INFO, "mbi.Protect= 0x%08x(%s)\n", mbi.Protect, retProtectionString(mbi.Protect).c_str());
+		Logger::getInstance()->write(LOG_INFO, "mbi.Type= 0x%08x\n", mbi.Type);
+	}
+
+	if (*(unsigned int*)0x00401000 != 0x456c0c50){
+		Logger::getInstance()->write(LOG_INFO, "Found youuuuuuuuuuuuuu\n");
+	}
+}
+
 UnpackingEngine* UnpackingEngine::instance = NULL;
 
 UnpackingEngine::UnpackingEngine(void)
@@ -34,9 +55,21 @@ UnpackingEngine::UnpackingEngine(void)
 	Logger::getInstance();
 }
 
+int count=0;
+
+void UnpackingEngine::logMe(const char*str)
+{
+	Logger::getInstance()->write(LOG_ERROR, str);
+	count+=1;
+	if (count== 3)
+		loopme();
+}
+
 
 UnpackingEngine::~UnpackingEngine(void)
 {
+	auto sg = this->lock->enterWithScopeGuard();
+	Logger::getInstance()->write(LOG_ERROR, "Going Down");
     delete this->hooks;
     delete this->lock;
 }
@@ -64,18 +97,19 @@ void UnpackingEngine::initialize()
     HOOK_GET_ORIG(this, "ntdll.dll", NtDelayExecution);
     HOOK_GET_ORIG(this, "ntdll.dll", NtAllocateVirtualMemory);
 	HOOK_GET_ORIG(this, "ntdll.dll", NtFreeVirtualMemory);
+	HOOK_GET_ORIG(this, "ntdll.dll", ZwTerminateThread);
     HOOK_GET_ORIG(this, "Kernel32.dll", CreateProcessInternalW);
 
 	Logger::getInstance()->write(LOG_INFO, "Finding original function addresses...");
-	Logger::getInstance()->write(LOG_INFO, "NtProtectVirtualMemory= %08x", this->origNtProtectVirtualMemory);
-	Logger::getInstance()->write(LOG_INFO, "NtWriteVirtualMemory= %08x", this->origNtWriteVirtualMemory);
-	Logger::getInstance()->write(LOG_INFO, "NtCreateThread= %08x", this->origNtCreateThread);
-	Logger::getInstance()->write(LOG_INFO, "NtMapViewOfSection= %08x", this->origNtMapViewOfSection);
-	Logger::getInstance()->write(LOG_INFO, "NtResumeThread= %08x", this->origNtResumeThread);
-	Logger::getInstance()->write(LOG_INFO, "NtDelayExecution= %08x", this->origNtDelayExecution);
-	Logger::getInstance()->write(LOG_INFO, "NtAllocateVirtualMemory= %08x", this->origNtAllocateVirtualMemory);
-	Logger::getInstance()->write(LOG_INFO, "NtFreeVirtualMemory= %08x", this->origNtFreeVirtualMemory);
-	Logger::getInstance()->write(LOG_INFO, "CreateProcessInternalW= %08x", this->origCreateProcessInternalW);
+	Logger::getInstance()->write(LOG_INFO, "NtProtectVirtualMemory= 0x%08x", this->origNtProtectVirtualMemory);
+	Logger::getInstance()->write(LOG_INFO, "NtWriteVirtualMemory= 0x%08x", this->origNtWriteVirtualMemory);
+	Logger::getInstance()->write(LOG_INFO, "NtCreateThread= 0x%08x", this->origNtCreateThread);
+	Logger::getInstance()->write(LOG_INFO, "NtMapViewOfSection= 0x%08x", this->origNtMapViewOfSection);
+	Logger::getInstance()->write(LOG_INFO, "NtResumeThread= 0x%08x", this->origNtResumeThread);
+	Logger::getInstance()->write(LOG_INFO, "NtDelayExecution= 0x%08x", this->origNtDelayExecution);
+	Logger::getInstance()->write(LOG_INFO, "NtAllocateVirtualMemory= 0x%08x", this->origNtAllocateVirtualMemory);
+	Logger::getInstance()->write(LOG_INFO, "NtFreeVirtualMemory= 0x%08x", this->origNtFreeVirtualMemory);
+	Logger::getInstance()->write(LOG_INFO, "CreateProcessInternalW= 0x%08x", this->origCreateProcessInternalW);
     Logger::getInstance()->write(LOG_INFO, "Finished finding original function addresses... DONE");
 
     this->hooks->doTransaction([=](){
@@ -89,6 +123,7 @@ void UnpackingEngine::initialize()
         HOOK_SET(this, this->hooks, NtResumeThread);
         HOOK_SET(this, this->hooks, NtDelayExecution);
         HOOK_SET(this, this->hooks, CreateProcessInternalW);
+		//HOOK_SET(this, this->hooks, ZwTerminateThread);
     });
 
     Logger::getInstance()->write(LOG_INFO, "Placing hooks... DONE");
@@ -98,6 +133,7 @@ void UnpackingEngine::initialize()
 void UnpackingEngine::uninitialize()
 {
     auto sg = this->lock->enterWithScopeGuard();
+	Logger::getInstance()->write(LOG_INFO, "Uninitializing...Youuuuu");
     Logger::getInstance()->uninitialize();
 }
 
@@ -153,7 +189,7 @@ void UnpackingEngine::DumpModuleInfo()
 #define PAGE_NOCACHE          0x200     // winnt
 */
 
-std::string UnpackingEngine::retProtectionString(ULONG protectionbits)
+std::string  UnpackingEngine::retProtectionString(ULONG protectionbits)
 {
 	std::string protectionstring;
 	protectionstring.reserve(64);
@@ -250,7 +286,7 @@ NTSTATUS UnpackingEngine::onNtProtectVirtualMemory(HANDLE process, PVOID* baseAd
     
 	NTSTATUS ret = this->origNtProtectVirtualMemory(process, baseAddress, numberOfBytes, newProtection, OldProtection);
 	Logger::getInstance()->write(LOG_INFO, "PST-NtProtectVirtualMemory(TargetPID %d, Address= 0x%08x, Size= 0x%08x, NewProtection= 0x%08x(%s), OldProtection= 0x%08x(%s))\n", GetProcessId(process), (DWORD)*baseAddress, (DWORD)*numberOfBytes, newProtection, retProtectionString(newProtection).c_str(), *OldProtection, retProtectionString(*OldProtection).c_str());
-
+	dumpMeminfoInfo();
     return ret;
 }
 
@@ -260,7 +296,7 @@ NTSTATUS UnpackingEngine::onNtWriteVirtualMemory(HANDLE process, PVOID baseAddre
 
     auto ret = this->origNtWriteVirtualMemory(process, baseAddress, buffer, numberOfBytes, numberOfBytesWritten);
 	Logger::getInstance()->write(LOG_INFO, "PST-NtWriteVirtualMemory(TargetPID %d, Address 0x%08x, Count 0x%08x) RET: 0x%08x\n", GetProcessId(process), baseAddress, (numberOfBytesWritten) ? *numberOfBytesWritten : numberOfBytes, ret);
-
+	dumpMeminfoInfo();
     return ret;
 }
 
@@ -283,7 +319,7 @@ BOOL WINAPI UnpackingEngine::onCreateProcessInternalW(
         if (ResumeThread(lpProcessInformation->hThread) == -1)
             Logger::getInstance()->write(LOG_ERROR, "Failed to resume process! Thread %d\n", lpProcessInformation->dwThreadId);
     }
-    
+    dumpMeminfoInfo();
 
     return ret;
 }
@@ -293,7 +329,7 @@ NTSTATUS WINAPI UnpackingEngine::onNtCreateThread(
     PCLIENT_ID ClientId, PCONTEXT ThreadContext, PINITIAL_TEB InitialTeb, BOOLEAN CreateSuspended)
 {
 	Logger::getInstance()->write(LOG_INFO, "PRE-NtCreateThread(TargetPID %d, Entry 0x%08x)\n", GetProcessId(ProcessHandle), ThreadContext->Eip);
-
+	dumpMeminfoInfo();
     return this->origNtCreateThread(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, ClientId, ThreadContext, InitialTeb, CreateSuspended);
 }
 
@@ -305,14 +341,14 @@ NTSTATUS WINAPI UnpackingEngine::onNtMapViewOfSection(
 
     auto ret = this->origNtMapViewOfSection(SectionHandle, ProcessHandle, BaseAddress, ZeroBits, CommitSize, SectionOffset, ViewSize, InheritDisposition, AllocationType, Protect);
 	Logger::getInstance()->write(LOG_INFO, "PST-NtMapViewOfSection(TargetPID %d, Address is 0x%08x, Size 0x%08x, Protect 0x%08x) RET: 0x%08x\n", GetProcessId(ProcessHandle), (DWORD)*BaseAddress, (DWORD)*ViewSize, Protect, ret);
-
+	dumpMeminfoInfo();
     return ret;
 }
 
 NTSTATUS WINAPI UnpackingEngine::onNtResumeThread(HANDLE thread, PULONG suspendCount)
 {
     Logger::getInstance()->write(LOG_INFO, "PRE-onNtResumeThread(TargetTID 0x%08x\n", thread);
-
+	dumpMeminfoInfo();
     return this->origNtResumeThread(thread, suspendCount);
 }
 
@@ -320,16 +356,22 @@ NTSTATUS WINAPI UnpackingEngine::onNtDelayExecution(BOOLEAN alertable, PLARGE_IN
 {
     Logger::getInstance()->write(LOG_INFO, "PRE-onNtDelayExecution Sleep call detected (Low part: 0x%08x, High part: 0x%08x).", time->LowPart, time->HighPart);
 
-	if (time->HighPart == 0x80000000 && time->LowPart == 0){
+	/*if (time->HighPart == 0x80000000 && time->LowPart == 0){
 		Logger::getInstance()->write(LOG_ERROR, "Infinite sleep. Fixing it.");
 		time->HighPart= 0;
 	}
 
 	time->HighPart= 0;
 	time->LowPart= 0; //0x3B9ACA00; 
-	Logger::getInstance()->write(LOG_INFO, "Fixed sleep (Low part: 0x%08x, High part: 0x%08x).", time->LowPart, time->HighPart);
-
+	Logger::getInstance()->write(LOG_INFO, "Fixed sleep (Low part: 0x%08x, High part: 0x%08x).", time->LowPart, time->HighPart);*/
+	dumpMeminfoInfo();
     return this->origNtDelayExecution(alertable, time);
+}
+
+NTSTATUS WINAPI UnpackingEngine::onZwTerminateThread(HANDLE thread, NTSTATUS ExitStatus )
+{
+	Logger::getInstance()->write(LOG_INFO, "PRE-ZwTerminateThread: TargetPID 0x%08x, ExitStatus 0x%08x", thread, ExitStatus);
+	return origZwTerminateThread(thread, ExitStatus);
 }
 
 NTSTATUS WINAPI UnpackingEngine::onNtFreeVirtualMemory(HANDLE process, PVOID* baseAddress, PULONG RegionSize, ULONG FreeType)
@@ -337,7 +379,7 @@ NTSTATUS WINAPI UnpackingEngine::onNtFreeVirtualMemory(HANDLE process, PVOID* ba
 	Logger::getInstance()->write(LOG_INFO, "PRE-NtFreeVirtualMemory: TargetPID %d, Address 0x%08x, RegionSize 0x%08x, FreeType 0x%08x(%s)", GetProcessId(process), (DWORD)*baseAddress, (DWORD)*RegionSize, FreeType, retProtectionString(FreeType));
 	auto ret= this->origNtFreeVirtualMemory(process, baseAddress, RegionSize, FreeType);
 	Logger::getInstance()->write(LOG_INFO, "PST-NtFreeVirtualMemory: TargetPID %d, Address 0x%08x, RegionSize 0x%08x, FreeType 0x%08x(%s)", GetProcessId(process), (DWORD)*baseAddress, (DWORD)*RegionSize, FreeType, retProtectionString(FreeType));
-	
+	dumpMeminfoInfo();
 	return ret;
 }
 
@@ -348,7 +390,7 @@ NTSTATUS WINAPI UnpackingEngine::onNtAllocateVirtualMemory(HANDLE ProcessHandle,
     auto ret = this->origNtAllocateVirtualMemory(ProcessHandle, BaseAddress, ZeroBits, RegionSize, AllocationType, Protect);
 
 	Logger::getInstance()->write(LOG_INFO, "PST-NtAllocateVirtualMemory(TargetPID %d, Address 0x%08x, Count 0x%08x, Protection 0x%08x(%s)) RET: 0x%08x\n", GetProcessId(ProcessHandle), (DWORD)*BaseAddress, (RegionSize) ? *RegionSize : 0, Protect, retProtectionString(Protect).c_str(), ret);
-
+	dumpMeminfoInfo();
     return ret;
 }
 

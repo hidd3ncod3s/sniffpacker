@@ -53,7 +53,7 @@ bool executeProcessAndInjectDll(wchar_t* fileName)
         injectDLL(ProcessInformation.hProcess, L"SniffPackerHook.dll");
         ResumeThread(ProcessInformation.hThread);
 
-        WaitForSingleObject(ProcessInformation.hThread, INFINITE);
+        WaitForSingleObject(ProcessInformation.hProcess, INFINITE);
         return true;
     }
     else

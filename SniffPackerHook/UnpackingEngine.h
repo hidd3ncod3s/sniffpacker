@@ -65,12 +65,14 @@ private:
     static UnpackingEngine* instance;
 	bool nestedHook, bypassHooks;
     HookingEngine* hooks;
+	DWORD processID;
     SyncLock* lock;
 
 	void setNestedbit(bool nested) {nestedHook= nested;}
 	bool isNestedHook() {return nestedHook;}
     
 	std::string retProtectionString(ULONG protectionbits);
+	void DumpModuleInfo();
 
     /* NtProtectVirtualMemory hook */
     HOOK_DEFINE_5(NTSTATUS, NTAPI, NtProtectVirtualMemory, HANDLE, PVOID*, PULONG, ULONG, PULONG);

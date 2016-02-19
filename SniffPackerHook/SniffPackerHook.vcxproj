@@ -88,6 +88,7 @@
     <ClInclude Include="detours.h" />
     <ClInclude Include="HookingEngine.h" />
     <ClInclude Include="Logger.h" />
+    <ClInclude Include="Memory.h" />
     <ClInclude Include="SyncLock.h" />
     <ClInclude Include="UnpackingEngine.h" />
   </ItemGroup>

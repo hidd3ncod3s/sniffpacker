@@ -1,5 +1,7 @@
 #include "UnpackingEngine.h"
 #include "Logger.h"
+#include "ntdefs.h"
+#include "Memory.h"
 
 #include <fstream>
 #include <sstream>
@@ -42,6 +44,17 @@ UnpackingEngine::~UnpackingEngine(void)
 void UnpackingEngine::initialize()
 {
     auto sg = this->lock->enterWithScopeGuard();
+
+	this->processID = GetCurrentProcessId();
+
+	/* init logger */
+    char logName[MAX_PATH];
+    sprintf_s<MAX_PATH>(logName, "C:\\dumps\\[%d]_packer_attacker.log", this->processID);
+    Logger::getInstance()->initialize(logName);
+
+	DumpModuleInfo();
+
+	Logger::getInstance()->write(LOG_INFO, "Starting hooking process...");
 
     HOOK_GET_ORIG(this, "ntdll.dll", NtProtectVirtualMemory);
     HOOK_GET_ORIG(this, "ntdll.dll", NtWriteVirtualMemory);
@@ -86,6 +99,43 @@ void UnpackingEngine::uninitialize()
 {
     auto sg = this->lock->enterWithScopeGuard();
     Logger::getInstance()->uninitialize();
+}
+
+void UnpackingEngine::DumpModuleInfo()
+{
+    auto mainModule = (BYTE*)GetModuleHandle(NULL);
+    assert(mainModule);
+
+    auto dosHeader = MakePointer<IMAGE_DOS_HEADER*, BYTE*>(mainModule, 0);
+    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+        return;
+
+    auto ntHeaders = MakePointer<IMAGE_NT_HEADERS*, BYTE*>(mainModule, dosHeader->e_lfanew);
+    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE)
+        return;
+
+    auto baseOfCode = MakePointer<DWORD, HMODULE>((HMODULE)mainModule, ntHeaders->OptionalHeader.BaseOfCode);
+    auto baseOfData = MakePointer<DWORD, HMODULE>((HMODULE)mainModule, ntHeaders->OptionalHeader.BaseOfData);
+    auto entryPoint = MakePointer<DWORD, HMODULE>((HMODULE)mainModule, ntHeaders->OptionalHeader.AddressOfEntryPoint);
+
+    Logger::getInstance()->write(LOG_INFO, "PE HEADER SAYS\n\tModule: 0x%08x\n\tCode: 0x%08x\n\tData: 0x%08x\n\tEP: 0x%08x", mainModule, baseOfCode, baseOfData, entryPoint);
+ 
+
+    bool eipAlreadyIgnored = false;
+    auto sectionHeader = IMAGE_FIRST_SECTION(ntHeaders);
+    for (DWORD i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++, sectionHeader++)
+    {
+        DWORD destination = MakePointer<DWORD, HMODULE>((HMODULE)mainModule, sectionHeader->VirtualAddress);
+        DWORD size = sectionHeader->SizeOfRawData;
+        if (size <= 0)
+        {
+            auto nextSection = sectionHeader; nextSection++;
+            size = nextSection->VirtualAddress - sectionHeader->VirtualAddress;
+        }
+
+		Logger::getInstance()->write(LOG_INFO, "PE section %s at 0x%08x to 0x%08x (char: 0x%08x)", sectionHeader->Name, destination, destination+size, sectionHeader->Characteristics);
+    }
+
 }
 
 

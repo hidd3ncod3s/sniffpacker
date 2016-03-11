@@ -11,7 +11,7 @@
 
 bool disableLogging= false;
 
-void loopme()
+void loopmenow()
 {
 	__asm
 	{
@@ -23,12 +23,16 @@ void loopme()
 	}
 }
 
+unsigned long modulecodeAddr;
+unsigned int modulestartvalues;
+
 void UnpackingEngine::dumpMeminfoInfo()
 {
 	MEMORY_BASIC_INFORMATION mbi;
+	//DWORD _address= 0x01001000;
 
 	memset(&mbi, 0, sizeof(MEMORY_BASIC_INFORMATION));
-	auto val= VirtualQuery((LPCVOID)0x00401000, &mbi, sizeof(MEMORY_BASIC_INFORMATION));
+	auto val= VirtualQuery((LPCVOID)modulecodeAddr, &mbi, sizeof(MEMORY_BASIC_INFORMATION));
 	if (val != 0){
 		Logger::getInstance()->write(LOG_INFO, "mbi.BaseAddress= 0x%08x\n", mbi.BaseAddress);
 		Logger::getInstance()->write(LOG_INFO, "mbi.AllocationBase= 0x%08x\n", mbi.AllocationBase);
@@ -37,11 +41,13 @@ void UnpackingEngine::dumpMeminfoInfo()
 		Logger::getInstance()->write(LOG_INFO, "mbi.State= 0x%08x\n", mbi.State);
 		Logger::getInstance()->write(LOG_INFO, "mbi.Protect= 0x%08x(%s)\n", mbi.Protect, retProtectionString(mbi.Protect).c_str());
 		Logger::getInstance()->write(LOG_INFO, "mbi.Type= 0x%08x\n", mbi.Type);
+
+		if (*(unsigned int*)modulecodeAddr  != modulestartvalues){
+			Logger::getInstance()->write(LOG_INFO, "Found youuuuuuuuuuuuuu\n");
+		}
 	}
 
-	if (*(unsigned int*)0x00401000 != 0x456c0c50){
-		Logger::getInstance()->write(LOG_INFO, "Found youuuuuuuuuuuuuu\n");
-	}
+	
 }
 
 UnpackingEngine* UnpackingEngine::instance = NULL;
@@ -61,8 +67,8 @@ void UnpackingEngine::logMe(const char*str)
 {
 	Logger::getInstance()->write(LOG_ERROR, str);
 	count+=1;
-	if (count== 3)
-		loopme();
+	//if (count== 3)
+	//	loopme();
 }
 
 
@@ -82,7 +88,7 @@ void UnpackingEngine::initialize()
 
 	/* init logger */
     char logName[MAX_PATH];
-    sprintf_s<MAX_PATH>(logName, "C:\\dumps\\[%d]_packer_attacker.log", this->processID);
+    sprintf_s<MAX_PATH>(logName, "C:\\dumps\\[%d]_sniffer_packer.log", this->processID);
     Logger::getInstance()->initialize(logName);
 
 	DumpModuleInfo();
@@ -137,6 +143,8 @@ void UnpackingEngine::uninitialize()
     Logger::getInstance()->uninitialize();
 }
 
+
+
 void UnpackingEngine::DumpModuleInfo()
 {
     auto mainModule = (BYTE*)GetModuleHandle(NULL);
@@ -155,6 +163,8 @@ void UnpackingEngine::DumpModuleInfo()
     auto entryPoint = MakePointer<DWORD, HMODULE>((HMODULE)mainModule, ntHeaders->OptionalHeader.AddressOfEntryPoint);
 
     Logger::getInstance()->write(LOG_INFO, "PE HEADER SAYS\n\tModule: 0x%08x\n\tCode: 0x%08x\n\tData: 0x%08x\n\tEP: 0x%08x", mainModule, baseOfCode, baseOfData, entryPoint);
+	modulecodeAddr= baseOfCode;
+	modulestartvalues= *(int*)baseOfCode;
  
 
     bool eipAlreadyIgnored = false;
@@ -356,12 +366,13 @@ NTSTATUS WINAPI UnpackingEngine::onNtDelayExecution(BOOLEAN alertable, PLARGE_IN
 {
     Logger::getInstance()->write(LOG_INFO, "PRE-onNtDelayExecution Sleep call detected (Low part: 0x%08x, High part: 0x%08x).", time->LowPart, time->HighPart);
 
-	/*if (time->HighPart == 0x80000000 && time->LowPart == 0){
+	if (time->HighPart == 0x80000000 && time->LowPart == 0){
 		Logger::getInstance()->write(LOG_ERROR, "Infinite sleep. Fixing it.");
 		time->HighPart= 0;
+		//loopme();
 	}
 
-	time->HighPart= 0;
+	/*time->HighPart= 0;
 	time->LowPart= 0; //0x3B9ACA00; 
 	Logger::getInstance()->write(LOG_INFO, "Fixed sleep (Low part: 0x%08x, High part: 0x%08x).", time->LowPart, time->HighPart);*/
 	dumpMeminfoInfo();

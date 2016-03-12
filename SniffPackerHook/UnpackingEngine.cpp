@@ -42,9 +42,14 @@ void UnpackingEngine::dumpMeminfoInfo()
 		Logger::getInstance()->write(LOG_INFO, "mbi.Protect= 0x%08x(%s)\n", mbi.Protect, retProtectionString(mbi.Protect).c_str());
 		Logger::getInstance()->write(LOG_INFO, "mbi.Type= 0x%08x\n", mbi.Type);
 
+		try{
 		if (*(unsigned int*)modulecodeAddr  != modulestartvalues){
-			Logger::getInstance()->write(LOG_INFO, "Found youuuuuuuuuuuuuu\n");
+			Logger::getInstance()->write(LOG_INFO, "Unpacked.\n");
+		} else {
+			Logger::getInstance()->write(LOG_INFO, "Still packed.\n");
 		}
+		}
+		catch(...) { /* */ }
 	}
 
 	
@@ -361,20 +366,31 @@ NTSTATUS WINAPI UnpackingEngine::onNtCreateThread(
 
 NTSTATUS WINAPI UnpackingEngine::onNtOpenSection( PHANDLE pSectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES pObjectAttributes)
 {
-	Logger::getInstance()->write(LOG_INFO, "PRE-NtOpenSection(SectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x)\n", pSectionHandle, DesiredAccess, pObjectAttributes);
+	//Logger::getInstance()->write(LOG_INFO, "PRE-NtOpenSection(pSectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x)\n", pSectionHandle, DesiredAccess, pObjectAttributes);
 
     auto ret = this->origNtOpenSection( pSectionHandle, DesiredAccess, pObjectAttributes);
-	Logger::getInstance()->write(LOG_INFO, "PRE-NtOpenSection(SectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x)\n", pSectionHandle, DesiredAccess, pObjectAttributes);
+
+	if (ret == STATUS_SUCCESS){
+		Logger::getInstance()->write(LOG_INFO, "PRE-NtOpenSection(SectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x)\n", *pSectionHandle, DesiredAccess, pObjectAttributes);
+	} else {
+		Logger::getInstance()->write(LOG_INFO, "PRE-NtOpenSection(DesiredAccess 0x%08x, pObjectAttributes 0x%08x)\n", DesiredAccess, pObjectAttributes);
+	}
+
+	
 	dumpMeminfoInfo();
     return ret;
 }
 
 NTSTATUS WINAPI UnpackingEngine::onNtCreateSection(PHANDLE pSectionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES pObjectAttributes, PLARGE_INTEGER pMaximumSize, ULONG SectionPageProtection, ULONG AllocationAttributes, HANDLE FileHandle)
 {
-	Logger::getInstance()->write(LOG_INFO, "PRE-NtCreateSection(SectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x, pMaximumSize 0x%08x, SectionPageProtection 0x%08x, AllocationAttributes 0x%08x, FileHandle 0x%08x)\n", pSectionHandle, DesiredAccess, pObjectAttributes, pMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
+	Logger::getInstance()->write(LOG_INFO, "PRE-NtCreateSection(pSectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x, pMaximumSize 0x%08x, SectionPageProtection 0x%08x, AllocationAttributes 0x%08x, FileHandle 0x%08x)\n", pSectionHandle, DesiredAccess, pObjectAttributes, pMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
 
     auto ret = this->origNtCreateSection( pSectionHandle, DesiredAccess, pObjectAttributes, pMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
-	Logger::getInstance()->write(LOG_INFO, "PST-NtCreateSection(SectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x, pMaximumSize 0x%08x, SectionPageProtection 0x%08x, AllocationAttributes 0x%08x, FileHandle 0x%08x)\n", pSectionHandle, DesiredAccess, pObjectAttributes, pMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
+	if (ret == STATUS_SUCCESS){
+		Logger::getInstance()->write(LOG_INFO, "PST-NtCreateSection(SectionHandle 0x%08x, DesiredAccess 0x%08x, pObjectAttributes 0x%08x, pMaximumSize 0x%08x, SectionPageProtection 0x%08x, AllocationAttributes 0x%08x, FileHandle 0x%08x)\n", *pSectionHandle, DesiredAccess, pObjectAttributes, pMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
+	} else {
+		Logger::getInstance()->write(LOG_INFO, "PST-NtCreateSection(DesiredAccess 0x%08x, pObjectAttributes 0x%08x, pMaximumSize 0x%08x, SectionPageProtection 0x%08x, AllocationAttributes 0x%08x, FileHandle 0x%08x)\n", DesiredAccess, pObjectAttributes, pMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle);
+	}
 	dumpMeminfoInfo();
     return ret;
 }
@@ -386,7 +402,7 @@ NTSTATUS WINAPI UnpackingEngine::onNtMapViewOfSection(
 	Logger::getInstance()->write(LOG_INFO, "PRE-NtMapViewOfSection(SectionHandle 0x%08x,TargetPID %d, Address 0x%08x, Size 0x%08x)\n", SectionHandle, GetProcessId(ProcessHandle), (DWORD)*BaseAddress, (DWORD)*ViewSize);
 
     auto ret = this->origNtMapViewOfSection(SectionHandle, ProcessHandle, BaseAddress, ZeroBits, CommitSize, SectionOffset, ViewSize, InheritDisposition, AllocationType, Protect);
-	Logger::getInstance()->write(LOG_INFO, "PST-NtMapViewOfSection(SectionHandle 0x%08x,TargetPID %d, Address 0x%08x, Size 0x%08x)\n", SectionHandle, GetProcessId(ProcessHandle), (DWORD)*BaseAddress, (DWORD)*ViewSize);
+	Logger::getInstance()->write(LOG_INFO, "PST-NtMapViewOfSection(SectionHandle 0x%08x,TargetPID %d, Address 0x%08x, Size 0x%08x, Protect 0x%08x(%s))\n", SectionHandle, GetProcessId(ProcessHandle), (DWORD)*BaseAddress, (DWORD)*ViewSize, Protect, retProtectionString(Protect).c_str());
 	dumpMeminfoInfo();
     return ret;
 }
